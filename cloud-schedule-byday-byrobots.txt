@@ -1,0 +1,15 @@
+with times as (
+select robot_id, started_at, COALESCE(finished_at, updated_at) as finished_at from runs where user_ip = '88.119.159.128' and started_at > '2020 04 09 00:00' and started_at < '2020-04-10 00:00' and user_email = 'cloudworker@webrobots.io'
+), 
+hrs as (
+select generate_series('2020 04 09 00:00'::timestamp, '2020-04-09 23:59', '10 minutes') as hr
+)
+select hrs.hr, sum(
+       CASE WHEN hrs.hr >= times.started_at and hrs.hr <= times.finished_at THEN 1
+            ELSE 0
+       END
+    ) as n_active, string_agg(
+CASE WHEN hrs.hr >= times.started_at and hrs.hr <= times.finished_at THEN times.robot_id
+--            ELSE ''
+       END, ', ') AS robots_active 
+ from times, hrs group by hrs.hr order by hr asc

@@ -1,0 +1,1 @@
+ select sum(duration/3600) from runs_agg where fork_id is null and user_email = 'cloudworker@webrobots.io' and user_ip = '88.119.159.128' and started_at > '2020 04 01' and started_at < '2020 04 08 00:00'

@@ -1,0 +1,12 @@
+with times as (
+select robot_id, started_at, COALESCE(finished_at, updated_at) as finished_at from runs where user_ip = '88.119.159.128' and started_at > date_trunc('day', localtimestamp - interval '3 day') and started_at < date_trunc('day', localtimestamp) and user_email = 'cloudworker@webrobots.io'
+), 
+hrs as (
+select generate_series(date_trunc('day', localtimestamp - interval '1 day'), date_trunc('day', localtimestamp)- interval '1 minute', '10 minutes') as hr
+)
+select hrs.hr, sum(
+       CASE WHEN hrs.hr >= times.started_at and hrs.hr <= times.finished_at THEN 1
+            ELSE 0
+       END
+	) as n_active
+ from times, hrs group by hrs.hr order by hr asc

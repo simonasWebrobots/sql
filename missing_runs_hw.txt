@@ -1,0 +1,89 @@
+function missing_hw_runs(now()-'02:00:00'::interval, now()-'01:00:00'){
+
+with cr as (
+	select r.cron, r.name as robot_id, qc_duration_max,
+	$1::date as dt
+	from robots r
+	where cron is not null and cron<>'* * * * 3000' and robot_queue_id=3
+),
+pr as ( -- Convert cron to fields
+	select 
+	cr.cron, cr.robot_id, cr.qc_duration_max, c.name as client, dt,
+	regexp_split_to_table(split_part(cr.cron, ' ', 1), ',') as min,
+	regexp_split_to_table(split_part(cr.cron, ' ', 2), ',') as hour,
+	regexp_split_to_table(split_part(cr.cron, ' ', 3), ',') as day,
+	regexp_split_to_table(split_part(cr.cron, ' ', 4), ',') as month,
+	regexp_split_to_table(split_part(cr.cron, ' ', 5), ',') as dow,
+	regexp_split_to_table(split_part(cr.cron, ' ', 6), ',') as year
+	from cr, robots r, clients c
+	where cr.robot_id=r.name and r.client_id=c.id
+),
+dr as ( -- Convert * to todays values
+	select 
+	cron, robot_id, qc_duration_max, client, dt,
+	case when min='*' then date_part('minute',dt)::text else min end as min,
+	case when hour='*' then date_part('hour', dt)::text else hour end as hour,
+	case when day='*' then date_part('day', dt)::text else day end as day,
+	case when month='*' then date_part('month', dt)::text else month end as month,
+	case when year='*' or year is null or year='' then date_part('year', dt)::text else year end as year,
+	dow
+	from pr
+	--where dow<>'*'
+	where dow='*' or dow=date_part('dow', dt)::text
+), 
+nr as ( -- Next_run dates for the whole day
+	select cron, client, robot_id, 
+	make_timestamp(year::int, month::int, day::int, hour::int, min::int, 0) next_run
+	from dr
+	order by client, robot_id
+),
+nf as ( -- Next finish dates for the whole day
+	select cron, client, robot_id, 
+	make_timestamp(year::int, month::int, day::int, hour::int, min::int, 0) + qc_duration_max  * interval '1 second' as next_fin
+	from dr
+	where dr.qc_duration_max is not null
+	order by client, robot_id
+
+),
+rr as ( -- Runs that started within scan window
+	select robot_id, run_id, started_at, finished_at, status, qc_status, rows from runs_agg where started_at>$1-interval '1 minutes' and started_at<$2+interval '60 minutes' and fork_id is null
+),
+rf as ( -- Runs that finished from start of day till within scan window
+	select robot_id, run_id, started_at, finished_at, status, qc_status, rows from runs_agg where finished_at>date_trunc('day', $1) and finished_at<$2+interval '90 minutes' and fork_id is null
+),
+strt as (
+	select 'DID_NOT_START'::text as lbl, nr.cron, nr.client, nr.robot_id, nr.next_run, rr.started_at-nr.next_run as delay, 
+	rr.run_id, rr.started_at, rr.status, rr.qc_status, rr.rows
+	from nr left join rr on nr.robot_id=rr.robot_id  and 
+		rr.started_at>nr.next_run-interval '5 minutes' and rr.started_at<nr.next_run+interval '60 minutes'  -- Allow 60 minutes for robot to start
+	order by nr.client, nr.next_run
+), 
+fin as (
+	select 'DID_NOT_FINISH'::text as lbl, nf.cron, nf.client, nf.robot_id, nf.next_fin, rf.finished_at-nf.next_fin as delay, 
+	rf.run_id, rf.finished_at, rf.status, rf.qc_status, rf.rows
+	from nf left join rf on nf.robot_id=rf.robot_id  and  rf.finished_at<nf.next_fin+interval '60 minutes'
+	order by nf.client, nf.next_fin
+)
+select * from strt where 
+	(
+	delay is null or delay>interval '60 minutes' or    -- Catch no starts or delayed starts
+	status in ('DEFUNCT', 'ERROR', 'FAILED')    -- Catch aborted, defunct, error runs
+	-- ((rows is null or rows<1) and (started_at>next_run+interval '5 minutes')) -- Robot is running but producing no data. Disabled, because QC will catch no data
+	) 
+	and next_run>$1 and next_run<$2
+union all
+select * from fin where (delay is null or delay>interval '60 minutes'  or status in ('DEFUNCT', 'ERROR', 'FAILED')) 
+and next_fin>$1 and next_fin<$2
+--select robot_id, run_id, started_at, finished_at, status, qc_status from runs_agg where started_at>now()-interval '1 day' and finished_at<now()
+/*
+"DEFUNCT"
+"ABORTED"
+"ERROR"
+"FINISHED"
+"FAILED"
+"WARN"
+"RUNNING"
+*/
+
+
+}

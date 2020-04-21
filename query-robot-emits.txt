@@ -1,0 +1,8 @@
+with run as (select content from crumbs where run_id = 'ikw_noon_2020-04-07T07_46_09_373Z'),
+emits as (select 
+	el->>'name' as name,
+	el->>'sku' as sku,
+	el->>'price' as price,
+	el->>'source_url' as source_url
+from run
+cross join json_array_elements(content::json) el)
