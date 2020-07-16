@@ -1,1 +1,11 @@
-select robot_id, max(duration)/min(duration) as duration_ratio from weeks_runs group by robot_id order by duration_ratio desc
+ with weeks_runs as (
+	select robot_id, duration, started_at 
+	from runs_agg 
+	where fork_id is null 
+	and user_email = 'cloudworker@webrobots.io' 
+	and user_ip = '88.119.159.128'
+	and started_at > '2020 06 29' 
+	and started_at < '2020 07 06 00:00'
+	and qc_status = 'OK'
+ )
+select robot_id, max(duration)/min(duration) as duration_ratio from weeks_runs group by robot_id order by duration_ratio desc 
