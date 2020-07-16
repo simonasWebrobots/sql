@@ -1,0 +1,1 @@
+select robot_id, max(duration)/min(duration) as duration_ratio from weeks_runs group by robot_id order by duration_ratio desc
