@@ -1,8 +1,8 @@
 with times as (
-select robot_id, started_at, COALESCE(finished_at, updated_at) as finished_at from runs where user_ip = '88.119.159.128' and started_at > '2020 04 09 00:00' and started_at < '2020-04-10 00:00' and user_email = 'cloudworker@webrobots.io'
+select robot_id, started_at, COALESCE(finished_at, updated_at) as finished_at from runs where user_ip = '88.119.159.128' and started_at > '2020 07 24 00:00' and started_at < '2020-07-26 00:00' and user_email = 'cloudworker@webrobots.io'
 ), 
 hrs as (
-select generate_series('2020 04 09 00:00'::timestamp, '2020-04-09 23:59', '10 minutes') as hr
+select generate_series('2020 07 25 00:00'::timestamp, '2020-07-25 23:59', '10 minutes') as hr
 )
 select hrs.hr, sum(
        CASE WHEN hrs.hr >= times.started_at and hrs.hr <= times.finished_at THEN 1
